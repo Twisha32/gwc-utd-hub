@@ -1,0 +1,51 @@
+# Whole stack for local use:  docker compose up --build
+# Web on :3000, API on :4000, Postgres on :5432.
+name: gwc-hub
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: gwc
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-gwc}
+      POSTGRES_DB: gwc
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gwc -d gwc"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build: ./api
+    environment:
+      # development so the session cookie works over plain http://localhost
+      NODE_ENV: development
+      PORT: 4000
+      DATABASE_URL: postgres://gwc:${POSTGRES_PASSWORD:-gwc}@db:5432/gwc
+      JWT_SECRET: ${JWT_SECRET:-local-dev-secret-not-for-real-use}
+      FLAG_PEPPER: ${FLAG_PEPPER:-local-dev-pepper}
+      WEB_ORIGIN: http://localhost:3000
+      ALLOWED_EMAIL_DOMAINS: ${ALLOWED_EMAIL_DOMAINS:-}
+      OFFICER_EMAILS: ${OFFICER_EMAILS:-}
+      CLUB_JOIN_CODE: ${CLUB_JOIN_CODE:-}
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "4000:4000"
+
+  web:
+    build: ./web
+    environment:
+      API_URL: http://api:4000
+    depends_on:
+      - api
+    ports:
+      - "3000:3000"
+
+volumes:
+  pgdata:
